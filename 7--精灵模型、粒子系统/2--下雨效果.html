@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="js/three.js"></script>
+    <script src="js/three.orbitcontrols.js"></script>
+    <style>
+
+    </style>
+</head>
+<body>
+<script>
+    var width;
+    var height;
+    var keyboard = {};
+    var player = {speed:8, turnSpeed:Math.PI*0.02 };
+    var cameraPositionY=0;
+    //渲染器（必要）
+    var renderer;
+    function initRender(){
+        //创建渲染器
+        renderer = new THREE.WebGLRenderer({
+            antialias:true
+        });
+        width = window.innerWidth;
+        height = window.innerHeight;
+        renderer.setSize(width,height);
+        //将渲染器添加到容器中
+        document.body.appendChild(renderer.domElement);
+        //设置渲染器的背景颜色
+        renderer.setClearColor(0x000000,1.0);
+    }
+    //场景（必要）
+    var scene;
+    function initScene(){
+        //创建场景
+        scene = new THREE.Scene();
+    }
+    //相机（必要）
+    var camera;
+    function initCamera() {
+        //创建一个相机（包括相机的角度、画布比例、最近、最远）
+        camera = new THREE.PerspectiveCamera(45,width/height,1,10000);
+        //设置相机的位置 x,y,z
+        camera.position.x=0;
+        camera.position.y=100;
+        camera.position.z=-500;
+        //设置相机的up x,y,z
+        // camera.up.x=0;
+        // camera.up.y=1;
+        // camera.up.z=0;
+        //设置的lookAt  x,y,z
+        // camera.lookAt({
+        //     x:0,
+        //     y:0,
+        //     z:0
+        // })
+        camera.lookAt(new THREE.Vector3(0,0,0));
+    }
+    //物品（必要）
+    var texture;
+    var group;
+    function initObject(){
+
+        var axis = new THREE.AxisHelper(2000);
+        scene.add(axis);
+        /**
+         * 验证1：森林例子
+         */
+
+            //创建一个草地
+        var geometry = new THREE.PlaneGeometry(1000,1000);
+        var texture = new THREE.TextureLoader().load('image/img_1.png');
+        //设置纹理重复
+        // texture.wrapS = THREE.RepeatWrapping;
+        // texture.wrapT = THREE.RepeatWrapping;
+        //uv两个方向纹理重复数量
+        // texture.repeat.set(10,10);
+        var material = new THREE.MeshLambertMaterial({
+            // color: 0x777700,
+            map:texture,
+            size:THREE.DoubleSide
+        });
+        var mesh = new THREE.Mesh(geometry,material);
+        mesh.rotateX(-Math.PI/2);
+        mesh.rotateZ(-Math.PI/4);
+        mesh.position.y=-50;
+        scene.add(mesh);
+        //精灵创建树林效果
+        group = new THREE.Group();
+        var texture2 = new THREE.TextureLoader().load('image/img_2.png');
+        // 批量创建表示雨滴的精灵模型
+        for (let i = 0; i < 1000; i++) {
+            var spriteMaterial = new THREE.SpriteMaterial({
+                map:texture2,//设置精灵纹理贴图
+            });
+            // 创建精灵模型对象
+            var sprite = new THREE.Sprite(spriteMaterial);
+            scene.add(sprite);
+            // 控制精灵大小,
+            sprite.scale.set(8, 10, 1); //// 只需要设置x、y两个分量就可以
+            var k1 = Math.random() - 0.5;
+            var k2 = Math.random() - 0.5;
+// 设置精灵模型位置，在空间中随机分布
+            sprite.position.set(1000 * k1, 300 * Math.random(), 1000 * k2)
+            group.add(sprite);
+        }
+        scene.add(group);//雨滴群组插入场景中
+    }
+
+    //光源（不一定需要）
+    var light;
+    function initLight(){
+        //创建一个光源
+        light = new THREE.AmbientLight(0xffffff);
+        //设置光源的位置
+        //light.position.set(100,100,200);
+        //将光源添加到场景中
+        scene.add(light);
+    }
+    //渲染（必要）
+    function animation(){
+        //清除渲染器的背景
+        renderer.clear();
+        // 物体的运动方式
+// 每次渲染遍历雨滴群组，刷新频率30~60FPS，两帧时间间隔16.67ms~33.33ms
+        // 每次渲染都会更新雨滴的位置，进而产生动画效果
+        group.children.forEach(sprite => {
+            // 雨滴的y坐标每次减1
+            sprite.position.y -= 2.5;
+            if (sprite.position.y < 0) {
+                // 如果雨滴落到地面，重置y，从新下落
+                sprite.position.y = 200;
+            }
+        });
+        //渲染器调用render函数，将场景和相机作为参数
+        renderer.render(scene,camera);
+        //调用requestAnimationFrame函数循环此渲染函数。
+        requestAnimationFrame(animation);
+        // controls.update();
+    }
+
+    function keyDown(event){
+        keyboard[event.keyCode] = true;
+        cameraPositionY = camera.rotation.y;
+    }
+
+    function keyUp(event){
+        keyboard[event.keyCode] = false;
+        cameraPositionY = 0;
+    }
+
+    //var controls;
+    //入口
+    function init(){
+        initRender();
+        initScene();
+        initCamera();
+        initObject();
+        initLight();
+        //controls = new THREE.OrbitControls(camera,renderer.domElement);
+        window.addEventListener('keydown', keyDown);
+        window.addEventListener('keyup', keyUp);
+        console.log(camera.rotation.y * (180/Math.PI));
+    }
+
+    init();
+    animation();
+</script>
+</body>
+</html>
