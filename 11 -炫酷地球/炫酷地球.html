@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>炫酷地球</title>
+    <style>
+        body{
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+<div id="container" style="width:100%;height:100vh;position:relative; overflow: hidden;"></div>
+
+<script src="js/three.js"></script>
+<script src="js/three.orbitcontrols.js"></script>
+<script src="js/d3-array.v1.min.js"></script>
+<script src="js/d3-geo.v1.min.js"></script>
+<script src="js/tween.min.js"></script>
+<script>
+
+    let renderer, camera, scene, light, controls;
+    let radius=5;
+    let clock = new THREE.Clock();
+    const Dom = document.querySelector( '#container' );
+    const width = Dom.clientWidth, height = Dom.clientHeight;
+    const posArr = [{ "x": 0.5738958419746141, "y": 0.44114968930852216, "z": 4.9473255920938985 }, { "x": -0.9326350073394328, "y": 2.8399222968004114, "z": -4.00812091773949 }, { "x": 3.469198597393574, "y": 1.2295167303380952, "z": -3.3842206934036057 }, { "x": -2.4019084876611916, "y": -2.190220428765315, "z": 3.7991801866087123 }, { "x": -2.49363689878109, "y": -4.099696049856375, "z": 1.4050862307450966 }, { "x": -2.3729307780326305, "y": 2.840227787960863, "z": 3.3618901878497454 }, { "x": -2.0636200279017873, "y": 0.7444294629976027, "z": -4.493027615657812 }, { "x": 0.47725894517680106, "y": 2.4327372143508037, "z": -4.34212085796347 }, { "x": -2.4777001955161246, "y": -1.2092952460724242, "z": 4.171163716394502 }, { "x": -0.03915748918627658, "y": -0.008362945319338826, "z": 4.999839672648135 }, { "x": 1.5223738738260317, "y": -1.032865814102439, "z": -4.649254348640267 }, { "x": -0.26640112020426315, "y": -4.314854187280748, "z": 2.5121830716848077 }, { "x": -4.031470206741836, "y": -2.606648761952297, "z": -1.3973654511134501 }, { "x": 0.8544382232162094, "y": 1.5274953155132989, "z": 4.683662390031124 }, { "x": 3.0409624989238546, "y": 1.76433738825175, "z": -3.555230043268055 }, { "x": -4.721251023266457, "y": 1.2354922989397954, "z": -1.0878177947459262 }, { "x": 2.1518961827021106, "y": 3.891904027152385, "z": -2.285262755638206 }, { "x": 0.8501960736517479, "y": -2.851729208821255, "z": -4.018060123480341 }, { "x": 2.5631840141785176, "y": 4.263234820997851, "z": -0.5048926326370041 }, { "x": -0.4580143454812531, "y": -2.6523265200067385, "z": 4.213714144386437 }];
+    const WaveMeshArr=[];//是所有光圈mesh的数组集合。
+
+    var group = new THREE.Group();//地球
+    var groupDots = new THREE.Group();//接收信号的点
+    var groupLines = new THREE.Group();//信号轨迹（贝塞尔曲线）
+    var groupHalo = new THREE.Group();//环绕轨迹、环绕星球
+    var aGroup = new THREE.Group();//信号动点
+    var chinaGroup = new THREE.Group();//中国边界
+    var lightCrossGroup = new THREE.Group();//发出信号点上的 光柱、信号源、信号光圈
+
+
+    /**
+     * @description 初始化渲染器
+     */
+    function initRenderer() {
+        renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setSize( width, height );
+        const containerDom = document.querySelector( '#container' );
+        containerDom.appendChild( renderer.domElement );
+    }
+    /**
+     * @description 初始化相机
+     */
+    function initCamera() {
+        camera = new THREE.PerspectiveCamera( 45, width / height, 1, 10000 );
+        camera.position.set( -5, 0, 300);
+        camera.lookAt( 0, 3, 0 );
+        window.camera = camera;
+    }
+    /**
+     * @description 初始化场景
+     */
+    function initScene() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color( 0x020924 );
+        scene.fog = new THREE.Fog( 0x020924, 200, 1000 );
+        window.scene = scene;
+    }
+    /**
+     * 初始化用户交互
+     **/
+    function initControls() {
+        controls = new THREE.OrbitControls( camera, renderer.domElement );
+        controls.listenToKeyEvents( window ); // optional
+
+        // controls.autoRotate = true;//将其设为true，以自动围绕目标旋转。请注意，如果它被启用，你必须在你的动画循环里调用.update()。
+        // controls.autoRotateSpeed =0.15;//围绕目标旋转的速度将有多快，默认值为2.0
+
+        //controls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
+
+        controls.enableDamping = true; // 将其设置为true以启用阻尼（惯性），这将给控制器带来重量感。默认值为false。
+        controls.dampingFactor = 0.05;//阻尼惯性的大小。当.enableDamping设置为true的时候，阻尼惯性有多大。
+
+        controls.screenSpacePanning = false;//定义当平移的时候摄像机的位置将如何移动。如果为true，摄像机将在屏幕空间内平移。 否则，摄像机将在与摄像机向上方向垂直的平面中平移。当使用 OrbitControls 时， 默认值为true；当使用 MapControls 时，默认值为false。
+
+        controls.minDistance = 1;
+        controls.maxDistance = 10000;
+
+        controls.maxPolarAngle = Math.PI;//你能够垂直旋转的角度的上限，范围是0到Math.PI，其默认值为Math.PI
+
+        // controls.keys = {//这一对象包含了用于控制相机平移的按键代码的引用。默认值为4个箭头（方向）键。
+        //     LEFT: 'ArrowLeft', //left arrow
+        //     UP: 'ArrowUp', // up arrow
+        //     RIGHT: 'ArrowRight', // right arrow
+        //     BOTTOM: 'ArrowDown' // down arrow
+        // };
+        // controls.keyPanSpeed = 4;//当使用键盘按键的时候，相机平移的速度有多快。默认值为每次按下按键时平移7像素。
+
+        //controls.rotateSpeed = 1;//旋转的速度，其默认值为1。
+        controls.zoomSpeed = 3;//摄像机缩放的速度，其默认值为1。
+    }
+
+    /**
+     * 通过两点绘制贝塞尔曲线
+     * v0：起点,
+     * v3：终点
+     */
+    // 添加线条
+    function addLines(v0, v3) {
+        //夹角
+        var angle = (v0.angleTo(v3) * 1.8) / Math.PI / 0.1;//0~Math.PI
+        var aLen = angle * 0.4,
+            hLen = angle * angle * 12;
+        var p0 = new  THREE.Vector3(0,0,0);//用于求两点形成的向量的法向量
+
+        // 开始，结束点
+        // var v0 = groupDots.children[0].position;
+        // var v3 = groupDots.children[1].position;
+
+        //法线向量：THREE.Ray(v1,v2) 向量v1v2缩成方向的法向量
+        var rayLine = new THREE.Ray(p0,getVCenter(v0.clone(),v3.clone()));//圆点与向量v0,v3的终点形成的垂直于向量v0v3的向量
+
+        //顶点坐标
+        var vtop = rayLine.at(hLen / rayLine.at(1).distanceTo(p0));
+
+        //控制点坐标
+        var v1 = getLenVcetor(v0.clone(),vtop,aLen);
+        var v2 = getLenVcetor(v3.clone(),vtop,aLen);
+        //绘制贝塞尔曲线
+        var curve = new THREE.CubicBezierCurve3(v0,v1,v2,v3);
+        var geometry = new THREE.Geometry();
+        geometry.vertices = curve.getPoints(50);
+        var material = new THREE.LineBasicMaterial({
+            vertexColors:true,
+            transparent:true,
+            side:THREE.DoubleSide,
+            // depthWrite:false
+        });
+        geometry.colors = curve.getPoints(50).map((elem,index) => index > 25 ? new THREE.Color(0xBD5CFF) : new THREE.Color(0xFF00FF));
+        var lineMesh = new THREE.Line(geometry,material);
+
+        return{
+            curve: curve,
+            lineMesh: lineMesh
+        }
+    }
+
+    // 计算v1,v2 的中点
+    function getVCenter(v1, v2) {
+        let v = v1.add(v2);
+        return v.divideScalar(2);
+    }
+
+    // 计算V1，V2向量固定长度的点
+    function getLenVcetor(v1, v2, len) {
+        let v1v2Len = v1.distanceTo(v2);
+        return v1.lerp(v2, len / v1v2Len);
+    }
+
+    /**
+     * 初始化物体
+     */
+    function initObject(){
+
+        var textureLoad = new THREE.TextureLoader();
+        //创建星空
+        initStar(textureLoad);
+        //地球
+        initEarth(textureLoad);
+        //大气层，就是地球 外边的那层光，使用精灵材质
+        initAtmosphere();
+        //卫星环绕
+        initHalo(textureLoad);
+        //定接收信号的点
+        var arr = posArr.map(pos =>{
+            var geometry = new THREE.PlaneGeometry(0.1,0.1);
+            var material = new THREE.PointsMaterial({color:'tomato'});
+            var points = new THREE.Points(geometry,material);
+            points.position.set(pos.x,pos.y,pos.z);
+            groupDots.add(points);
+        });
+        //飞线（添加贝塞尔曲线）
+        var animateDots=[];
+        groupDots.children.forEach(elem =>{
+            var line = addLines(groupDots.children[0].position,elem.position);
+            groupLines.add(line.lineMesh);
+            animateDots.push(line.curve.getPoints(100));
+        });
+
+        //添加动点
+        // 添加动画
+        for (let i = 0; i < animateDots.length; i++) {
+            let aGeo = new THREE.SphereGeometry(0.03, 1, 0.03);
+            let aMater = new THREE.MeshPhongMaterial({
+                color: '#fff',
+                transparent:true,
+                side:THREE.DoubleSide,
+                depthWrite:false
+            });
+            let aMesh = new THREE.Mesh(aGeo, aMater);
+            aGroup.add(aMesh);
+        }
+
+        var vIndex =0;
+        function animateLine(){
+            aGroup.children.forEach((elem,index) => {
+                var v = animateDots[index][vIndex];
+                elem.position.set(v.x,v.y,v.z);
+            });
+            vIndex++;
+            if(vIndex>100){
+                vIndex = 0;
+            };
+            setTimeout(animateLine,10);
+        }
+        scene.add(groupLines);
+        scene.add(aGroup);
+        animateLine();
+
+        //标注
+        textureLoad.load('images/icon_circle2.png',function(texture){
+            for(var i=0;i<posArr.length;i++){
+                var PointMesh = createPointMesh(posArr[i],texture);
+                lightCrossGroup.add(PointMesh);
+            }
+        })
+        //发送幸好点添加信号发散光圈
+        signalLightCanvas();
+        //光柱特效
+        initLightCross(textureLoad);
+        scene.add(lightCrossGroup);
+
+
+        //绘制中国边界
+        let loader = new THREE.FileLoader();
+        loader.load('model/chinaJson.json', function (data) {
+            let jsonData = JSON.parse(data);
+            initMap(jsonData); // 解析并绘制地图
+        });
+
+
+    }
+    /**
+     * 星空
+     */
+    function initStar(textureLoad){
+        const positions = [];
+        const Color = [];
+        const star_geometry = new THREE.BufferGeometry();
+        for (var i = 0; i < 10000; i ++) {
+            var vertex = new THREE.Vector3();
+            vertex.x = Math.random() * 2 - 1;
+            vertex.y = Math.random() * 2 - 1;
+            vertex.z = Math.random() * 2 - 1;
+            positions.push( vertex.x, vertex.y, vertex.z );
+            var color = new THREE.Color();
+            color.setHSL( Math.random() * 0.2 + 0.5, 0.55, Math.random() * 0.25 + 0.55 );
+            Color.push( color.r, color.g, color.b );
+        }
+        var vertices = new Float32Array(positions);
+        var colors = new Float32Array(Color);
+        star_geometry.attributes.position = new THREE.BufferAttribute( vertices, 3 );
+        star_geometry.attributes.color = new THREE.BufferAttribute( colors, 3 );
+
+        textureLoad.load('images/圆.png',function(texture){
+            var starsMaterial = new THREE.PointsMaterial( {
+                map:texture,
+                size: 1,
+                transparent:true,
+                opacity: 1,
+                vertexColors: THREE.VertexColors, //true：且该几何体的colors属性有值，则该粒子会舍弃第一个属性--color，而应用该几何体的colors属性的颜色
+                side:THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+                sizeAttenuation: true,
+                depthWrite:false
+            } );
+
+            stars = new THREE.Points( star_geometry, starsMaterial );
+            stars.scale.set( 300, 300, 300 );
+            scene.add( stars );
+        })
+    }
+    /**
+     * 地球
+     */
+    function initEarth(textureLoad){
+        //地球
+        textureLoad.load('images/earth2.jpg',function(texture){
+            var earth_geometry = new THREE.SphereGeometry(radius,100,100);
+            var earth_material = new THREE.MeshStandardMaterial({
+                map:texture, //设置高光
+                specular:0x4488ee,
+                shininess:12,
+                transparent:true
+            });
+            earth_mesh = new THREE.Mesh(earth_geometry,earth_material);
+            group.add( earth_mesh );
+            group.rotation.set( 0.6, 2.8, 0.05 );
+            scene.add(group);
+        });
+    }
+    /**
+     * 大气层
+     */
+    function initAtmosphere(){
+        //创建画布
+        var canvas = document.createElement('canvas');
+        //设置画布大小
+        canvas.width = 100;
+        canvas.height=100;
+        //创建一个用于在画布上绘图的环境
+        var context = canvas.getContext('2d');
+        //创建一个放射性渐变
+        var gradient = context.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,canvas.width/2);
+        //在画布渐变开始位置添加一种颜色，
+        gradient.addColorStop(0,'rgba(255,255,255,0)');
+        gradient.addColorStop(0.6,'#E4F9FA');
+        //在画布渐变的最后位置添加一种颜色，
+        gradient.addColorStop(1,'rgba(255,255,255,0)');
+        //填充方式就是刚才创建的渐变填充
+        context.fillStyle = gradient;
+        //实际的在画布上绘制渐变。
+        context.fillRect(0,0,canvas.width,canvas.height);//绘制被填充的矩形，前两个是左上角坐标，后两个是长和宽
+
+        var texture = new THREE.CanvasTexture(canvas);
+        var material = new THREE.SpriteMaterial({
+            map:texture,
+            opacity:0.5,
+            transparent:true,
+            depthWrite:false
+        });
+        var sprite = new THREE.Sprite(material);
+        sprite.scale.set(11.5,11.5,11.5);
+        scene.add(sprite);
+    }
+    /**
+     * 卫星环绕
+     */
+    function initHalo(textureLoad){
+
+        textureLoad.load('images/halo.png',function(halo_texture){
+            var geometry = new THREE.PlaneGeometry( 14, 14 );
+            var material = new THREE.MeshLambertMaterial( {
+                map: halo_texture,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            } );
+            halo_mesh = new THREE.Mesh( geometry, material );
+            groupHalo.add( halo_mesh );
+
+        } );
+
+        textureLoad.load('images/smallEarth.png',function(smallEarth_texture){
+            var position = new Float32Array([
+                -7,0,0,7,0,0
+            ]);
+            var smallEarth_geometry = new THREE.BufferGeometry();
+            smallEarth_geometry.attributes.position = new THREE.BufferAttribute(position,3);
+            var smallEarth_material = new THREE.PointsMaterial({
+                map: smallEarth_texture,
+                transparent: true,
+                side: THREE.DoubleSide,
+                size: 2,
+                depthWrite: false
+            })
+            smallEarth_point = new THREE.Points(smallEarth_geometry,smallEarth_material);
+            groupHalo.add(smallEarth_point);
+            groupHalo.rotation.set(1.9, 0.5, 1);
+            scene.add(groupHalo);
+        });
+
+    }
+    /**
+     * 标注
+     */
+    function createPointMesh( pos, texture ) {
+        var material = new THREE.MeshBasicMaterial( {
+            map: texture,
+            transparent: true, //使用背景透明的png贴图，注意开启透明计算
+            // side: THREE.DoubleSide, //双面可见
+            depthWrite: false, //禁止写入深度缓冲区数据
+        } );
+        var planGeometry = new THREE.PlaneGeometry(0.5,0.5);
+        var mesh = new THREE.Mesh( planGeometry, material );
+        var size = radius * 0.04;//矩形平面Mesh的尺寸
+        mesh.scale.set( size, size, size );//设置mesh大小
+        //设置mesh位置
+        mesh.position.set( pos.x, pos.y, pos.z );
+
+        // mesh在球面上的法线方向(球心和球面坐标构成的方向向量)
+        var coordVec3 = new THREE.Vector3( pos.x, pos.y, pos.z ).normalize();
+        // mesh默认在XOY平面上，法线方向沿着z轴new THREE.Vector3(0, 0, 1)
+        var meshNormal = new THREE.Vector3( 0, 0, 1 );
+        // 四元数属性.quaternion表示mesh的角度状态
+        //.setFromUnitVectors();计算两个向量之间构成的四元数值
+        mesh.quaternion.setFromUnitVectors( meshNormal, coordVec3 );
+        return mesh;
+    }
+
+    /**
+     * 发送信号光圈
+     */
+    function signalLightCanvas(){
+        //创建画布
+        var canvas = document.createElement('canvas');
+        //设置画布大小
+        canvas.width = 20;
+        canvas.height=20;
+        //2.获取在 canvas 上绘图的 canvasRenderingContent2D 对象。这两行是必不可少的哦
+        var ctx=canvas.getContext("2d");
+
+//3.绘制
+        //第一圈
+        ctx.beginPath();//开始绘制
+        ctx.lineWidth = 1;//线的宽度
+        ctx.arc(10,10,1,0,2*Math.PI);//arc 的意思是“弧”
+        ctx.fillStyle = 'rgba(255, 255, 255, 0)';//画布背景
+        ctx.strokeStyle="#00ff00";//将线条颜色设置为蓝色
+        ctx.stroke();//stroke() 方法默认颜色是黑色（如果没有上面一行，则会是黑色）。
+        ctx.closePath();//结束绘制
+
+        //第二圈
+        ctx.beginPath();//开始绘制
+        ctx.lineWidth = 1;//线的宽度
+        ctx.arc(10,10,3,0,2*Math.PI);//arc 的意思是“弧”
+        ctx.fillStyle = 'rgba(255, 255, 255, 0)';//画布背景
+        ctx.strokeStyle="#5CFF5C";//将线条颜色设置为蓝色
+        ctx.stroke();//stroke() 方法默认颜色是黑色（如果没有上面一行，则会是黑色）。
+        ctx.closePath();//结束绘制
+
+        //第三圈
+        ctx.beginPath();//开始绘制
+        ctx.lineWidth = 1;//线的宽度
+        ctx.arc(10,10,6,0,2*Math.PI);//arc 的意思是“弧”
+        ctx.fillStyle = 'rgba(255, 255, 255, 0)';//画布背景
+        ctx.strokeStyle="#97FF97";//将线条颜色设置为蓝色
+        ctx.stroke();//stroke() 方法默认颜色是黑色（如果没有上面一行，则会是黑色）。
+        ctx.closePath();//结束绘制
+
+        //第四圈
+        ctx.beginPath();//开始绘制
+        ctx.lineWidth = 1;//线的宽度
+        ctx.arc(10,10,9,0,2*Math.PI);//arc 的意思是“弧”
+        ctx.fillStyle = 'rgba(255, 255, 255, 0)';//画布背景
+        ctx.strokeStyle="#BDFFBD";//将线条颜色设置为蓝色
+        ctx.stroke();//stroke() 方法默认颜色是黑色（如果没有上面一行，则会是黑色）。
+        ctx.closePath();//结束绘制
+
+        var canvas_texture = new THREE.CanvasTexture(canvas);
+        canvas_texture.needsUpdate = true;
+        var canvas_geometry = new THREE.PlaneBufferGeometry (10,10);
+        var canvas_material = new THREE.MeshBasicMaterial({
+            map:canvas_texture,
+            transparent:true,
+            side:THREE.DoubleSide,
+            depthWrite:false
+        });
+
+
+        //循环获取posArr.lenght个信号光圈
+        for(var i=0;i<posArr.length;i++){
+            var canvas_mesh = new THREE.Mesh(canvas_geometry,canvas_material);
+            canvas_mesh.position.set(posArr[i].x,posArr[i].y,posArr[i].z);
+
+            // mesh在球面上的法线方向(球心和球面坐标构成的方向向量)
+            var coordVec3 = new THREE.Vector3( posArr[i].x,posArr[i].y,posArr[i].z ).normalize();
+            // mesh默认在XOY平面上，法线方向沿着z轴new THREE.Vector3(0, 0, 1)
+            var canvas_meshNormal = new THREE.Vector3( 0, 0, 1 );
+            // 四元数属性.quaternion表示mesh的角度状态
+            //.setFromUnitVectors();计算两个向量之间构成的四元数值
+            canvas_mesh.quaternion.setFromUnitVectors( canvas_meshNormal, coordVec3 );
+            canvas_mesh.scale.set(0.05,0.05,0.05);
+
+            lightCrossGroup.add(canvas_mesh);
+            WaveMeshArr.push(canvas_mesh);
+        }
+        // return canvas_mesh;
+    }
+    /**
+     * 光柱特效
+     */
+    function initLightCross(textureLoad){
+        var lightCrossGeometry = new THREE.PlaneGeometry(8,8);
+        var lightCrossMaterial = new THREE.MeshPhongMaterial({
+            map:textureLoad.load('images/光柱.png'),
+            transparent:true,
+            side:THREE.DoubleSide,
+            depthWrite:false
+        });
+        var lightCrossMesh = new THREE.Mesh(lightCrossGeometry,lightCrossMaterial);
+        lightCrossMesh.position.set(posArr[0].x,posArr[0].y,posArr[0].z+0.1);
+        lightCrossMesh.rotation.x = Math.PI/4;
+        lightCrossMesh.scale.set(0.3,0.3,0.3);
+        lightCrossGroup.add(lightCrossMesh);
+
+        var lightCrossGeometry2 = new THREE.PlaneGeometry(5,5);
+        var lightCrossMaterial2 = new THREE.MeshPhongMaterial({
+            map:textureLoad.load('images/icon_xfq04.png'),
+            transparent:true,
+            side:THREE.DoubleSide,
+            depthWrite:false
+        });
+        var lightCrossMesh2 = new THREE.Mesh(lightCrossGeometry2,lightCrossMaterial2);
+        lightCrossMesh2.position.set(posArr[0].x,posArr[0].y,posArr[0].z+0.1);
+        // lightCrossMesh2.rotation.x = Math.PI/2;
+        lightCrossMesh2.scale.set(0.1,0.1,0.1);
+        lightCrossGroup.add(lightCrossMesh2);
+    }
+    /**
+     * 描绘中国边界(曲面）
+     */
+    function initMap( chinaJson ) {
+        //创建一个空对象存放对象
+        map = new THREE.Object3D();
+        map.name = "china";
+        // 遍历省份构建模型
+        chinaJson.features.forEach( elem => {
+            // 新建一个省份容器：用来存放省份对应的模型和轮廓线
+            const province = new THREE.Object3D();
+            const coordinates = elem.geometry.coordinates;
+            coordinates.forEach( multiPolygon => {
+                multiPolygon.forEach( polygon => {
+                    const lineMaterial = new THREE.LineBasicMaterial( { color: 0XF19553 } ); //0x3BFA9E
+                    const positions = [];
+                    const linGeometry = new THREE.BufferGeometry();
+                    for (let i = 0; i < polygon.length; i ++) {
+                        var pos = lglt2xyz( polygon[i][0], polygon[i][1] );
+                        positions.push( pos.x, pos.y, pos.z );
+                    }
+                    linGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+                    const line = new THREE.Line( linGeometry, lineMaterial );
+                    province.add( line );
+                } );
+            } );
+            map.add( province );
+            map.scale.set(5,5,5);
+            map.rotation.y = Math.PI;
+
+        } );
+        chinaGroup.add(map);
+        // chinaGroup.rotation.x = 0.594;
+        // chinaGroup.rotation.y = -0.348;
+        // chinaGroup.rotation.z = -0.062;
+        chinaGroup.rotation.set(0.594, -0.348,-0.062);
+        scene.add(chinaGroup);
+    }
+
+    /**
+     * 描绘中国边界(平面）
+     */
+    //
+    // function initMap(chinaJson)
+    // {
+    //     //创建一个空对象存放对象
+    //     map = new THREE.Object3D();
+    //     map.name = "china";
+    //     //定义一个球体
+    //
+    //     //墨卡托投影转换 将经纬度转为坐标值
+    //     const projection = d3.geoMercator().center([104.0,37.5]).scale(80).translate([0,0]);
+    //
+    //     chinaJson.features.forEach((elem,index) => {
+    //         //定义一个省份3D对象
+    //         const province = new THREE.Object3D();
+    //         //每个的 坐标 数组
+    //         const coordinates = elem.geometry.coordinates;
+    //         //循环坐标数组
+    //         coordinates.forEach(multiPolygon =>{
+    //             multiPolygon.forEach( polygon =>{
+    //                 const shape = new THREE.Shape();
+    //                 const  lineMaterial = new THREE.MeshBasicMaterial({
+    //                     color:'white'
+    //                 })
+    //
+    //                 const lineGeometry = new THREE.Geometry();
+    //                 for(let i = 0; i< polygon.length; i++)
+    //                 {
+    //                     const [x,y] = projection(polygon[i]);
+    //                     if(i === 0)
+    //                     {
+    //                         shape.moveTo(x,-y);
+    //                     }
+    //                     shape.lineTo(x,-y);
+    //                     lineGeometry.vertices.push(new THREE.Vector3(x,-y,4.01));
+    //                 }
+    //                 //拉伸厚度
+    //                 const extrudeSettings = {
+    //                     depth:4,
+    //                     bevelEnabled:false
+    //                 };
+    //                 const geometry = new THREE.ExtrudeGeometry(shape,extrudeSettings);
+    //                 const material = new THREE.MeshBasicMaterial({
+    //                     color:'#02A1E2',
+    //                     transparent:true,
+    //                     opacity:0.6
+    //                 });
+    //                 const material1 = new THREE.MeshBasicMaterial({
+    //                     color:'#3480C4',
+    //                     transparent:true,
+    //                     opacity:0.5
+    //                 });
+    //
+    //                 //this.mesh = new THREE.Mesh(geometry,[material,material1]);
+    //                 const line = new THREE.Line(lineGeometry,lineMaterial);
+    //                 // // 设置高度将省区分开来
+    //                 // if (index % 2 === 0) {
+    //                 //     this.mesh.scale.set(1, 1, 1.2);
+    //                 // }
+    //                 // province.add(this.mesh);
+    //                 province.add(line);
+    //             })
+    //         })
+    //
+    //         //将geo的属性放到省份模型中
+    //         province.properties = elem.properties;
+    //         if(elem.properties.contorid)
+    //         {
+    //             const [ x,y] = projection(elem.properties.contorid);
+    //             province.properties._centroid =[x,y];
+    //         }
+    //         map.add(province);
+    //         map.scale.set(0.2,0.2,0.2);
+    //     })
+    //
+    //     chinaGroup.add(map);
+    // }
+
+    /**
+     * 经纬度坐标转换为3D控件坐标(有两种方法)
+     * lng:纬度
+     * lat:进度
+     * radius：半径
+     //  */
+    function lglt2xyz(lng,lat,radius){
+        /*
+            js方法转换
+         */
+        // const phi = (180+lng) * (Math.PI/180);
+        // const theta = (90-lat) * (Math.PI/180);
+        // return {
+        //     x:-radius * Math.sin(theta) * Math.cos(phi),
+        //     y:radius * Math.cos(theta),
+        //     z:radius * Math.sin(theta) * Math.sin(phi)
+        // }
+
+        /*
+            three.js自带
+         */
+        const phi = (90-lat) * (Math.PI/180);
+        const theta = (90+lng) * (Math.PI/180);
+        return (new THREE.Vector3()).setFromSpherical(new THREE.Spherical(radius,phi,theta));
+    }
+
+    /**
+     * 标注
+     */
+    function createPointMesh( pos, texture ) {
+        var material = new THREE.MeshBasicMaterial( {
+            map: texture,
+            transparent: true, //使用背景透明的png贴图，注意开启透明计算
+            // side: THREE.DoubleSide, //双面可见
+            depthWrite: false, //禁止写入深度缓冲区数据
+        } );
+        var planGeometry = new THREE.PlaneGeometry(0.5,0.5);
+        var mesh = new THREE.Mesh( planGeometry, material );
+        var size = radius * 0.04;//矩形平面Mesh的尺寸
+        mesh.scale.set( size, size, size );//设置mesh大小
+        //设置mesh位置
+        mesh.position.set( pos.x, pos.y, pos.z );
+        // mesh在球面上的法线方向(球心和球面坐标构成的方向向量)
+        var coordVec3 = new THREE.Vector3( pos.x, pos.y, pos.z ).normalize();
+        // mesh默认在XOY平面上，法线方向沿着z轴new THREE.Vector3(0, 0, 1)
+        var meshNormal = new THREE.Vector3( 0, 0, 1 );
+        // 四元数属性.quaternion表示mesh的角度状态
+        //.setFromUnitVectors();计算两个向量之间构成的四元数值
+        mesh.quaternion.setFromUnitVectors( meshNormal, coordVec3 );
+        return mesh;
+    }
+
+    /**
+     * @description 初始化光
+     */
+    function initLight() {
+        const ambientLight = new THREE.AmbientLight( 0xcccccc, 1.1 );
+        scene.add( ambientLight );
+        var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.2 );
+        directionalLight.position.set( 1, 0.1, 0 ).normalize();
+        var directionalLight2 = new THREE.DirectionalLight( 0xff2ffff, 0.2 );
+        directionalLight2.position.set( 1, 0.1, 0.1 ).normalize();
+        scene.add( directionalLight );
+        scene.add( directionalLight2 );
+        var hemiLight = new THREE.HemisphereLight( 0xffffff, 0x444444, 0.2 );
+        hemiLight.position.set( 0, 1, 0 );
+        scene.add( hemiLight );
+        var directionalLight = new THREE.DirectionalLight( 0xffffff );
+        directionalLight.position.set( 1, 500, - 20 );
+        directionalLight.castShadow = true;
+        directionalLight.shadow.camera.top = 18;
+        directionalLight.shadow.camera.bottom = - 10;
+        directionalLight.shadow.camera.left = - 52;
+        directionalLight.shadow.camera.right = 12;
+        scene.add(directionalLight);
+    }
+
+    /**
+     * 窗口变动
+     **/
+    function onWindowResize() {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize( innerWidth, innerHeight );
+        renders();
+    }
+    /**
+     * @description 渲染
+     */
+    function renders() {
+        renderer.clear();
+        renderer.render( scene, camera );
+    }
+    //动画，控制相机
+    function initTween(){
+        //tween动画引擎，将相机的位置从上面定义的300，在3秒内移到20
+        new TWEEN.Tween(camera.position).to({x:-2,z:20},3000).start();
+    }
+    /**
+     * 更新
+     **/
+    function animate() {
+        window.requestAnimationFrame(() => {
+            if (controls) controls.update();
+            //光圈动画
+            var size = 0.03;
+            if (WaveMeshArr.length) {
+                WaveMeshArr.forEach( function ( mesh ) {
+                    mesh._s += 0.007;
+                    mesh.scale.set( size* mesh._s, size * mesh._s,size * mesh._s );
+                    if (mesh._s <= 1.5) {
+                        //mesh._s=1，透明度=0 mesh._s=1.5，透明度=1
+                        mesh.material.opacity = ( mesh._s - 1 ) * 2;
+                    } else if (mesh._s > 1.5 && mesh._s <= 2) {
+                        //mesh._s=1.5，透明度=1 mesh._s=2，透明度=0
+                        mesh.material.opacity = 1 - ( mesh._s - 1.5 ) * 2;
+                    } else {
+                        mesh._s = 1.0;
+                    }
+                } );
+            }
+            renders();
+            animate();
+            TWEEN.update();//完成了让动画动起来到目标。如果不调用这个函数场景就不能动起来了
+        });
+    }
+
+    window.onload = () => {
+        initRenderer();
+        initCamera();
+        initScene();
+        initObject();
+        initLight();
+        initControls();
+        initTween();
+        animate();
+        window.addEventListener('resize', onWindowResize, false);
+    };
+
+</script>
+</body>
+</html>
